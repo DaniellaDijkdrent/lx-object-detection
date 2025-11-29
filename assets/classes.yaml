@@ -1,0 +1,16 @@
+path: /content/assets/duckietown_object_detection_dataset
+train: train/images
+val: val/images
+
+names:
+  0: yellow rubber duckie
+  # 1: duckiebot
+  # 2: traffic light
+  # 3: qr code
+  # 4: stop sign
+  # 5: intersection sign
+  # 6: traffic light
+  # 7: traffic cone
+  # 8: wooden toy house
+  # 9: boat
+  # 10: tree
