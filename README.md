@@ -18,6 +18,8 @@ see [our Self-Driving Cars with Duckietown MOOC on EdX](https://learning.edx.org
 
 # Instructions
 
+The most up-to-date instructions are on the Duckietown Manual: [ML-based object detection LX](https://docs.duckietown.com/ente/duckietown-manual/60-learning-experiences/lx-setup-ml-based-object-detection.html).
+
 **(If not already done) Clone this repository**
 
 The recommended way to use this repository is to make a fork and then clone that fork. 
