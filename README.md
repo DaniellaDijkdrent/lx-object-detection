@@ -36,7 +36,7 @@ This can be done through the GitHub web interface. However, you are also free to
 
 Update your exercise definition and instructions,
 
-    git remote add upstream git@github.com:duckietown/lx-control
+    git remote add upstream git@github.com:duckietown/lx-object-detection
     git pull upstream <your upstream branch>
 
 
