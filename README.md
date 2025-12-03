@@ -11,7 +11,7 @@ and using this to train a neural network to perform object detection using the r
 to ensure that we don't run over any duckie pedestrians in Duckietown. 
 We will use one of the most popular object detection neural networks, called [YOLO (v11)](https://docs.ultralytics.com/models/yolo11/).
 You will also have to integrate this trained model into a feedback controller so that we don't run over duckies. 
-For now we will just stop whenever an object (duckie) is detected in the road. 
+For now, we will just stop whenever an object (duckie) is detected in the road. 
 
 This learning experience is provided by the Duckietown team and can be run on Duckiebots. Visit us at the 
 [Duckietown Website](https://www.duckietown.com) for more learning materials, documentation, and demos.
