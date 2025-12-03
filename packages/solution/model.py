@@ -49,7 +49,7 @@ class MLModel:
             # TODO we don't want to consider detections with confidence (score) below CONF_THRESHOLD (a value you should set in config.py)
 
 
-            # TODO we want to stop if there is duckie closer than STOP_DISTANCE away
+            # TODO we want to stop if there is a duckie closer than STOP_DISTANCE away
             # To calculate if the duckie is too close we need to convert the pixel coordinates to 
             # world coordinates. To do so you can use the `self.ground_projector` object which has
             # loaded the camera extrinsic calibration
