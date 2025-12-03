@@ -83,8 +83,8 @@ class MLModel:
             detections = self._run_detector(img)
         except Exception as e:
             print(f"ONNX inference error {e}")
-            return DifferentialPWM(left=0.0, right=0.0)
+            return [DifferentialPWM(left=0.0, right=0.0), None]
         if self._should_stop(detections):
-            return DifferentialPWM(left=0.0, right=0.0)
+            return [DifferentialPWM(left=0.0, right=0.0), detections]
         else:
-            return DifferentialPWM(left=FORWARD_PWM, right=FORWARD_PWM)
+            return [DifferentialPWM(left=FORWARD_PWM, right=FORWARD_PWM), detections]
