@@ -50,6 +50,10 @@ class MLModel:
 
         print("Raw model output shape:", out.shape)
 
+        print("MODEL RAW OUTPUT TYPE:", type(out))
+    print("MODEL RAW OUTPUT SHAPE:", [o.shape for o in out] if isinstance(out, list) else out.shape)
+    print("RAW OUTPUT SAMPLE:", out)
+
         return out[0]
 
     # -----------------------------
