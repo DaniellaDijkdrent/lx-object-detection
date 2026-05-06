@@ -46,15 +46,16 @@ class MLModel:
     # -----------------------------
     def _run_detector(self, img_bgr):
         x = self._preprocess(img_bgr)
-        out = self.session.run(None, {self.input_name: x})[0]
+        
+        out = self.session.run(None, {self.input_name: x})
 
-        print("Raw model output shape:", out.shape)
-
-        print("MODEL RAW OUTPUT TYPE:", type(out))
-    print("MODEL RAW OUTPUT SHAPE:", [o.shape for o in out] if isinstance(out, list) else out.shape)
-    print("RAW OUTPUT SAMPLE:", out)
+    # 🔍 DEBUG: inspect model output
+        print("OUTPUT SHAPE:", out[0].shape)
+        print("RAW SAMPLE:", out[0][0][:10])
 
         return out[0]
+
+        
 
     # -----------------------------
     # STOP LOGIC
