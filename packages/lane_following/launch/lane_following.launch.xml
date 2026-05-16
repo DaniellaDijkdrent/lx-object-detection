@@ -1,0 +1,17 @@
+<launch>
+
+    <node
+        pkg="lane_filter"
+        exec="lane_filter_node"
+        name="lane_filter_node"
+        output="screen">
+    </node>
+
+    <node
+        pkg="lane_control"
+        exec="lane_controller_node"
+        name="lane_controller_node"
+        output="screen">
+    </node>
+
+</launch>

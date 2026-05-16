@@ -1,0 +1,144 @@
+# Duckietown – Taak 1: Lane-following
+
+## Projectdoel
+
+Het doel van deze opdracht is om de Duckiebot autonoom gecentreerd binnen de rijstrook vooruit te laten rijden.
+
+De robot moet:
+
+- rijstrookmarkeringen detecteren
+- stuurhoek aanpassen
+- snelheid regelen
+- langdurig stabiel binnen de lijnen blijven
+
+---
+
+## Belangrijk: gebaseerd op Duckietown demo
+
+Deze implementatie is gebaseerd op de officiële **Duckietown lane-following demo**.
+
+De standaard Duckietown pipeline is gebruikt als **basisplattegrond / framework**, waarna de controllerparameters zijn aangepast en getuned voor stabieler rijgedrag.
+
+Gebruikte Duckietown componenten:
+
+- `lane_filter`
+- `lane_controller`
+
+De focus van deze opdracht ligt dus op:
+
+- parameter tuning
+- stabiliteitsverbetering
+- minder oscillaties
+- soepeler sturen
+
+---
+
+## Projectstructuur
+
+```bash
+packages/lane_following/
+├── config/
+│   ├── lane_controller_node.yaml
+│   └── lane_filter_node.yaml
+└── launch/
+    └── lane_following.launch.xml
+```
+
+---
+
+## Werking van het systeem
+
+### 1. Camerabeelden
+
+De onboard camera levert continu beelden van de weg.
+
+---
+
+### 2. Lane filter
+
+De Duckietown `lane_filter` detecteert:
+
+- witte rijstrooklijn
+- gele rijstrooklijn
+- laterale afwijking (`d`)
+- hoekafwijking (`phi`)
+
+Output:
+
+```text
+d = afstand tot rijstrookcentrum
+phi = hoek t.o.v. de rijrichting
+```
+
+---
+
+### 3. Lane controller
+
+De `lane_controller` gebruikt deze waarden om stuurcommando’s te berekenen.
+
+Belangrijke parameters:
+
+### Snelheid
+
+```yaml
+v_bar: 0.19
+```
+
+Lager gekozen voor extra stabiliteit.
+
+---
+
+### Laterale correctie
+
+```yaml
+k_d: -2.0
+```
+
+Corrigeert afwijking naar links/rechts.
+
+---
+
+### Hoekcorrectie
+
+```yaml
+k_theta: -3.0
+```
+
+Corrigeert heading errors.
+
+---
+
+### Integrator
+
+```yaml
+k_Id: -3.0
+```
+
+Helpt kleine blijvende afwijkingen weg te werken.
+
+---
+
+## Tuningdoelen
+
+De parameters zijn aangepast om:
+
+- oscillaties te verminderen
+- abrupt stuurgedrag te voorkomen
+- bochten soepeler te nemen
+- langere tijd binnen de lijnen te blijven
+
+---
+
+## Starten
+
+Run:
+
+```bash
+ros2 launch packages/lane_following/launch/lane_following.launch.xml
+```
+
+---
+
+## Resultaat
+
+De Duckiebot volgt autonoom de rijstrook, blijft gecentreerd rijden en vertoont stabiel en soepel stuurgedrag over langere tijd.
