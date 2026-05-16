@@ -1,20 +1,31 @@
 #!/usr/bin/env python3
 
 import numpy as np
+import cv2
 from pathlib import Path
 import onnxruntime as ort
-from dt_computer_vision.camera.types import Pixel
 
+from dt_computer_vision.camera.types import Pixel
 from duckietown_messages.actuators.differential_pwm import DifferentialPWM
-from solution.config import MODEL_PATH, CONF_THRESHOLD, STOP_DISTANCE, FORWARD_PWM
+
+from solution.config import (
+    MODEL_PATH,
+    CONF_THRESHOLD,
+    STOP_DISTANCE,
+    FORWARD_PWM,
+)
+
 
 class MLModel:
     def __init__(self):
         print("Initializing MLModel")
+
         self.ground_projector = None
 
         if not MODEL_PATH.exists():
-            raise FileNotFoundError("ONNX model not found (did you download your trained model?):", MODEL_PATH)
+            raise FileNotFoundError(
+                f"ONNX model not found: {MODEL_PATH}"
+            )
 
         sess_opts = ort.SessionOptions()
         sess_opts.intra_op_num_threads = 1
@@ -22,69 +33,151 @@ class MLModel:
         self.session = ort.InferenceSession(
             str(MODEL_PATH),
             sess_options=sess_opts,
-            providers=["CUDAExecutionProvider", "CPUExecutionProvider"], 
+            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
         )
 
         inp = self.session.get_inputs()[0]
+
         self.input_name = inp.name
-        self.in_dtype = np.float16 if inp.type == "tensor(float16)" else np.float32
+        self.in_dtype = (
+            np.float16
+            if inp.type == "tensor(float16)"
+            else np.float32
+        )
 
-        self.net_h = inp.shape[2]
-        self.net_w = inp.shape[3]
+        self.net_h = int(inp.shape[2])
+        self.net_w = int(inp.shape[3])
 
+        print(f"ONNX INPUT SIZE: {self.net_w}x{self.net_h}")
 
+    # -------------------------------------------------
+    # PREPROCESS
+    # -------------------------------------------------
+    def _preprocess(self, img_bgr):
+
+        print("ORIGINAL IMAGE:", img_bgr.shape)
+
+        # resize naar model input
+        img = cv2.resize(img_bgr, (self.net_w, self.net_h))
+
+        # BGR -> RGB
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        # normalize
+        img = img.astype(self.in_dtype) / 255.0
+
+        # HWC -> CHW
+        img = np.transpose(img, (2, 0, 1))
+
+        # batch dimension
+        img = np.expand_dims(img, axis=0)
+
+        print("MODEL INPUT:", img.shape)
+        print("INPUT RANGE:", img.min(), img.max())
+
+        return img
+
+    # -------------------------------------------------
+    # INFERENCE
+    # -------------------------------------------------
     def _run_detector(self, img_bgr):
+
         x = self._preprocess(img_bgr)
-        out = self.session.run(None, {self.input_name: x})[0]  # shape [1,N,6]
+
+        outputs = self.session.run(
+            None,
+            {self.input_name: x}
+        )
+
+        print("NUM OUTPUTS:", len(outputs))
+
+        for i, o in enumerate(outputs):
+            print(f"OUTPUT {i} SHAPE:", o.shape)
+
+        out = outputs[0]
+
+        print("RAW OUTPUT SAMPLE:")
+        print(out[0][:5])
+
         return out[0]
 
+    # -------------------------------------------------
+    # STOP LOGIC
+    # -------------------------------------------------
+    def _should_stop(self, detections):
 
-    def _should_stop(self, detections: np.ndarray): 
-        
         stop = False
 
-        for x1, y1, x2, y2, score, _ in detections:
+        print("TOTAL DETECTIONS:", len(detections))
 
-            print(f"Detection: {x1}-{x2}, {y1}-{y2}, {score}")
-            # TODO we don't want to consider detections with confidence (score) below CONF_THRESHOLD (a value you should set in config.py)
+        for det in detections:
 
+            if len(det) < 6:
+                continue
 
-            # TODO we want to stop if there is a duckie closer than STOP_DISTANCE away
-            # To calculate if the duckie is too close we need to convert the pixel coordinates to 
-            # world coordinates. To do so you can use the `self.ground_projector` object which has
-            # loaded the camera extrinsic calibration
-            # Specifically, if you want to project an object of type `pix = Pixel(x=u, y=v)` to a ground plane
-            # point, you can first convert it to a vector (`vec = self.ground_projector.camera.pixel2vector(pix)`) and
-            # then you can intersect that vector with the ground plane (`self.ground_projector.vector2ground(vec)`). 
-            # That will be the point on the ground plane corresponding to the input pixel. 
+            x1, y1, x2, y2, score, cls = det[:6]
+
+            print(
+                f"Detection: "
+                f"{x1:.1f}, {y1:.1f}, "
+                f"{x2:.1f}, {y2:.1f}, "
+                f"conf={score:.3f}"
+            )
+
+            # confidence filtering
+            if score < CONF_THRESHOLD:
+                continue
+
+            print("VALID DETECTION FOUND")
+
+            # tijdelijke test:
+            # zodra model iets detecteert -> stoppen
+            stop = True
+
+            # later kan je distance logic toevoegen
 
         return stop
 
-
-    def _preprocess(self, img_bgr):
-        h, w = img_bgr.shape[:2]
-
-        if h != self.net_h or w != self.net_w:
-            raise ValueError(
-                f"Image size {h}x{w} does not match ONNX! Expected {self.net_h}x{self.net_w}"
-            )
-
-        img = img_bgr[:, :, ::-1].astype(self.in_dtype) / 255.0
-        img = np.transpose(img, (2, 0, 1))[None, ...]
-        return img
-
-
+    # -------------------------------------------------
+    # GROUND PROJECTOR
+    # -------------------------------------------------
     def set_ground_projector(self, gp):
         self.ground_projector = gp
-        
 
-    def get_wheel_velocities_from_image(self, img: np.ndarray):
+    # -------------------------------------------------
+    # PUBLIC API
+    # -------------------------------------------------
+    def get_wheel_velocities_from_image(self, img):
+
         try:
             detections = self._run_detector(img)
+
         except Exception as e:
-            print(f"ONNX inference error {e}")
-            return [DifferentialPWM(left=0.0, right=0.0), None]
-        if self._should_stop(detections):
-            return [DifferentialPWM(left=0.0, right=0.0), detections]
-        else:
-            return [DifferentialPWM(left=FORWARD_PWM, right=FORWARD_PWM), detections]
+
+            print("ONNX inference error:", e)
+
+            return [
+                DifferentialPWM(left=0.0, right=0.0),
+                None,
+            ]
+
+        should_stop = self._should_stop(detections)
+
+        if should_stop:
+
+            print("STOPPING")
+
+            return [
+                DifferentialPWM(left=0.0, right=0.0),
+                detections,
+            ]
+
+        print("DRIVING")
+
+        return [
+            DifferentialPWM(
+                left=FORWARD_PWM,
+                right=FORWARD_PWM,
+            ),
+            detections,
+        ]
