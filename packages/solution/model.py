@@ -22,6 +22,8 @@ class MLModel:
         if not MODEL_PATH.exists():
             raise FileNotFoundError(f"ONNX model not found at: {MODEL_PATH}")
 
+        print("AVAILABLE PROVIDERS:", ort.get_available_providers())
+
         self.session = ort.InferenceSession(
             str(MODEL_PATH),
             providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
@@ -29,8 +31,6 @@ class MLModel:
 
         inp = self.session.get_inputs()[0]
         self.input_name = inp.name
-
-        self.in_dtype = np.float32
 
         self.net_h = int(inp.shape[2])
         self.net_w = int(inp.shape[3])
@@ -40,76 +40,109 @@ class MLModel:
         self.ground_projector = None
 
     # -----------------------------
-    # PREPROCESS (FIXED)
+    # PREPROCESS
     # -----------------------------
     def _preprocess(self, img_bgr):
 
-        # resize ALWAYS (important fix)
+        # resize
         img = cv2.resize(img_bgr, (self.net_w, self.net_h))
 
         # BGR -> RGB
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # normalize
-        img = img.astype(np.float32) / 255.0
+        # IMPORTANT:
+        # model expects FLOAT16
+        img = img.astype(np.float16) / 255.0
 
         # HWC -> CHW
         img = np.transpose(img, (2, 0, 1))
 
-        # batch
-        return np.expand_dims(img, axis=0)
+        # batch dimension
+        img = np.expand_dims(img, axis=0)
+
+        return img
 
     # -----------------------------
-    # INFERENCE (FIXED DEBUGGING)
+    # INFERENCE
     # -----------------------------
     def _run_detector(self, img_bgr):
 
         x = self._preprocess(img_bgr)
 
-        # DEBUG INPUT
         print("INPUT SHAPE:", x.shape)
+        print("INPUT DTYPE:", x.dtype)
         print("INPUT RANGE:", x.min(), x.max())
 
         out = self.session.run(None, {self.input_name: x})
 
-        # DEBUG OUTPUT STRUCTURE (IMPORTANT)
         print("NUM OUTPUTS:", len(out))
+
         for i, o in enumerate(out):
-            print(f"OUTPUT {i}: shape={o.shape}, min={o.min():.4f}, max={o.max():.4f}")
+            print(
+                f"OUTPUT {i}: shape={o.shape}, "
+                f"min={o.min():.4f}, max={o.max():.4f}"
+            )
 
         return out
 
     # -----------------------------
-    # SAFE DETECTION PARSING
+    # YOLOv8 PARSER
     # -----------------------------
     def _parse_detections(self, outputs):
 
         preds = outputs[0]
 
-        # if model returns nothing usable
         if preds is None or len(preds) == 0:
             return []
+
+        # remove batch dimension
+        preds = preds[0]
+
+        # transpose if needed
+        # (84,8400) -> (8400,84)
+        if preds.shape[0] < preds.shape[1]:
+            preds = preds.transpose(1, 0)
 
         detections = []
 
         for p in preds:
 
-            # EXPECTED FORMAT:
-            # x1, y1, x2, y2, conf, class
             if len(p) < 6:
                 continue
 
-            x1, y1, x2, y2, conf, cls = p[:6]
+            # YOLO format:
+            # x,y,w,h,class_scores...
+            x, y, w, h = p[:4]
+
+            class_scores = p[4:]
+
+            cls = np.argmax(class_scores)
+            conf = class_scores[cls]
 
             if conf < CONF_THRESHOLD:
                 continue
 
-            detections.append((x1, y1, x2, y2, conf, cls))
+            # xywh -> xyxy
+            x1 = x - (w / 2)
+            y1 = y - (h / 2)
+            x2 = x + (w / 2)
+            y2 = y + (h / 2)
+
+            detections.append((
+                float(x1),
+                float(y1),
+                float(x2),
+                float(y2),
+                float(conf),
+                int(cls),
+            ))
+
+        print(f"Parsed {len(detections)} detections")
 
         return detections
 
     # -----------------------------
-    # STOP LOGIC (UNCHANGED BUT SAFE)
+    # STOP LOGIC
     # -----------------------------
     def _should_stop(self, detections):
 
@@ -158,13 +191,26 @@ class MLModel:
 
         except Exception as e:
             print("Inference error:", e)
-            return [DifferentialPWM(0.0, 0.0), None]
+
+            return [
+                DifferentialPWM(left=0.0, right=0.0),
+                None,
+            ]
 
         print("DETECTIONS:", detections)
 
         stop = self._should_stop(detections)
 
         if stop:
-            return [DifferentialPWM(0.0, 0.0), detections]
+            return [
+                DifferentialPWM(left=0.0, right=0.0),
+                detections,
+            ]
 
-        return [DifferentialPWM(FORWARD_PWM, FORWARD_PWM), detections]
+        return [
+            DifferentialPWM(
+                left=FORWARD_PWM,
+                right=FORWARD_PWM,
+            ),
+            detections,
+        ]
